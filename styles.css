@@ -1720,6 +1720,93 @@ code {
   cursor: pointer;
   white-space: nowrap;
 }
+.reference-section {
+  margin-top: 26px;
+  margin-bottom: 26px;
+}
+.reference-section h2 {
+  margin-bottom: 16px;
+}
+.track-card {
+  border: 1px solid var(--line, #ddd);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 0;
+}
+.reference-section p,
+.detail-card p,
+.active-checklist details p {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.reference-section a,
+.detail-card a,
+.hub-tabs a {
+  overflow-wrap: anywhere;
+}
+.block {
+  display: block;
+  margin-top: 8px;
+}
+.assessment-group {
+  border: 0;
+  padding: 0;
+  margin: 26px 0;
+  min-width: 0;
+}
+.assessment-group legend {
+  font-weight: 700;
+  font-size: 20px;
+  padding: 0;
+  margin-bottom: 14px;
+}
+.match-actions form {
+  margin-top: 20px;
+}
+.row.wrap {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.hub-tabs {
+  flex-wrap: wrap;
+  margin: 28px 0;
+  gap: 8px;
+}
+.hub-tabs a {
+  padding: 12px;
+  text-decoration: none;
+  border-radius: 8px;
+}
+.hub-tabs .selected {
+  background: #112b27;
+  color: #fff;
+}
+.active-checklist label,
+.detail-card li {
+  overflow-wrap: anywhere;
+}
+.active-checklist details,
+.track-card details,
+.detail-card details {
+  margin: 12px 0;
+}
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+@media (max-width: 600px) {
+  .active-checklist .row.between {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .match-actions .btn {
+    width: 100%;
+  }
+  .hub-tabs a {
+    font-size: 13px;
+  }
+}
 .review-banner {
   flex-wrap: wrap;
 }

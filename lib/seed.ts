@@ -1,5 +1,6 @@
 import type { State, User, Program } from "./model";
 import { now } from "./domain";
+import { addReferenceContent, referenceInterests } from "./reference";
 // Deliberately public demo markers, not credentials or password hashes.
 const hash = (value: string) => "sample-marker:" + value;
 const defaultSettings = (): State["settings"] => ({
@@ -9,38 +10,7 @@ const defaultSettings = (): State["settings"] => ({
   durationDays: null,
   access: { school: true, library: true, individual: true },
 });
-export const interests = [
-  {
-    id: "precision",
-    name: "Precision & detail",
-    description: "Measure carefully and solve precise problems",
-  },
-  {
-    id: "systems",
-    name: "Systems & troubleshooting",
-    description: "Understand how parts work together",
-  },
-  {
-    id: "building",
-    name: "Making & building",
-    description: "Turn a plan into something tangible",
-  },
-  {
-    id: "outdoors",
-    name: "Outdoor work",
-    description: "Work in changing spaces and conditions",
-  },
-  {
-    id: "machines",
-    name: "Tools & machines",
-    description: "Operate equipment and learn its mechanics",
-  },
-  {
-    id: "creative",
-    name: "Visual & creative work",
-    description: "Care about finish, appearance and design",
-  },
-];
+export const interests = referenceInterests;
 export function blankProgram(tradeId = "electrician", programId = "") {
   return {
     id: programId,
@@ -219,7 +189,7 @@ export function seed(): State {
     location: "North area · synthetic program",
     steps: programs[0].steps.map((x) => ({ ...x })),
   });
-  return {
+  const state: State = {
     users,
     settings: defaultSettings(),
     institutions: [
@@ -339,4 +309,6 @@ export function seed(): State {
     paymentClocks: {},
     attempts: {},
   };
+  addReferenceContent(state);
+  return state;
 }

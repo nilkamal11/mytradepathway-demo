@@ -50,6 +50,7 @@ export type Step = {
   checklist: boolean;
 };
 export type Question = {
+  section?: string;
   id: string;
   prompt: string;
   options: string[];
@@ -66,6 +67,35 @@ export type Trade = {
   verifiedAt: string;
 };
 export type Program = {
+  reference?: {
+    snapshotDate: string;
+    description: string;
+    blurb: string;
+    tags: string[];
+    county: string;
+    tracks: {
+      name: string;
+      length: string;
+      short: string;
+      covers: string;
+      related?: string;
+    }[];
+    tracksIntro: string;
+    tracksNote: string;
+    wageRows: string[][];
+    wageTracks: { name: string; start: string; journey: string }[];
+    wageNote: string;
+    tools: string[];
+    toolsNote: string;
+    apply: string;
+    sources: { title: string; url: string }[];
+    practiceNote: string;
+    practiceLabel: string;
+    dayInLife: string;
+    videoTitle: string;
+    videoNote: string;
+    greenEnergyNote: string;
+  };
   id: string;
   tradeId: string;
   name: string;

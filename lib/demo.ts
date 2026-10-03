@@ -1,6 +1,7 @@
 // No HTTP requests or production integrations. Every operation changes this browser's sample state.
 import type { State, User, Program } from "./model";
 import { seed, interests } from "./seed";
+import { addReferenceContent } from "./reference";
 import {
   check,
   now,
@@ -22,7 +23,7 @@ export interface DemoStorage {
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
 }
-type Snapshot = { version: 1; actorId: string | null; state: State };
+type Snapshot = { version: 2; actorId: string | null; state: State };
 export const fixtures = [
   { id: "demo-student", label: "Student - Prairie School" },
   { id: "demo-adult", label: "Adult - individual access" },
@@ -49,6 +50,39 @@ function fresh(): Snapshot {
     },
   };
   state.users.push(sample);
+  for (const [n, name, tradeId] of [
+    [1, "Morgan Ellis", "plumber"],
+    [2, "Jamie Park", "welder"],
+    [3, "Riley Quinn", "painter"],
+    [4, "Drew Carter", "pipefitter"],
+  ] as const) {
+    const learner: User = {
+      ...structuredClone(template),
+      id: `sample-student-${n}`,
+      name,
+      email: `learner${n}@school-a.example.test`,
+      saved: [tradeId],
+      selection: `${tradeId}-reference-cook`,
+      assessment: {
+        answers: ["building", "precision"],
+        matches: matchTrades(["building", "precision"], state.trades),
+        version: "supplied-tags-v2",
+      },
+    };
+    state.users.push(learner);
+    state.grants.push({
+      id: `fixture:${learner.id}`,
+      userId: learner.id,
+      source: "school",
+      institutionId: "school-a",
+      start: "2020-01-01T00:00:00.000Z",
+      end: "2099-01-01T00:00:00.000Z",
+      active: true,
+    });
+    record(state, learner, "assessment");
+    record(state, learner, "save", tradeId);
+    record(state, learner, "select", tradeId, learner.selection);
+  }
   state.grants.push({
     id: "fixture-sample",
     userId: sample.id,
@@ -93,7 +127,7 @@ function fresh(): Snapshot {
     status: "queued",
     at: now(),
   });
-  return { version: 1, actorId: null, state };
+  return { version: 2, actorId: null, state };
 }
 const safe = (u: User) => ({
   id: u.id,
@@ -115,12 +149,31 @@ export class DemoEngine {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (
-          parsed.version === 1 &&
+          [1, 2].includes(parsed.version) &&
           Array.isArray(parsed.state?.users) &&
           Array.isArray(parsed.state?.programs)
-        )
+        ) {
+          if (parsed.version === 1) {
+            addReferenceContent(parsed.state);
+            const samples = fresh().state;
+            for (const learner of samples.users.filter((x) =>
+              x.id.startsWith("sample-student-"),
+            )) {
+              if (!parsed.state.users.some((x: User) => x.id === learner.id))
+                parsed.state.users.push(learner);
+            }
+            for (const grant of samples.grants.filter((x) =>
+              x.id.startsWith("fixture:sample-student-"),
+            )) {
+              if (!parsed.state.grants.some((x: any) => x.id === grant.id))
+                parsed.state.grants.push(grant);
+            }
+            parsed.version = 2;
+            this.notice =
+              "New reference content added. Your saved trades and existing program progress were retained.";
+          }
           this.snapshot = parsed;
-        else this.notice = "Saved demo version was reset.";
+        } else this.notice = "Saved demo version was reset.";
       }
     } catch {
       this.notice = "Saved demo data could not be read. Using a fresh sample.";
@@ -319,19 +372,17 @@ export class DemoEngine {
         school: school.name,
         total: rows.length,
         page,
-        rows: rows
-          .slice((page - 1) * 20, page * 20)
-          .map((x) => ({
-            ...safe(x),
-            matches: x.assessment?.matches || [],
-            saved: x.saved,
-            progress: x.selection
-              ? progressPercent(s, x.id, program(x.selection))
-              : null,
-            lastActive: s.events
-              .filter((e) => e.userId === x.id && e.institutionId === school.id)
-              .at(-1)?.at,
-          })),
+        rows: rows.slice((page - 1) * 20, page * 20).map((x) => ({
+          ...safe(x),
+          matches: x.assessment?.matches || [],
+          saved: x.saved,
+          progress: x.selection
+            ? progressPercent(s, x.id, program(x.selection))
+            : null,
+          lastActive: s.events
+            .filter((e) => e.userId === x.id && e.institutionId === school.id)
+            .at(-1)?.at,
+        })),
       };
     }
     if (key === "reports") {
@@ -353,6 +404,7 @@ export class DemoEngine {
         "assessment",
         "save",
         "select",
+        "clear-selection",
         "progress",
         "practice",
         "correction",
@@ -363,13 +415,13 @@ export class DemoEngine {
         check(
           Array.isArray(b?.answers) &&
             b.answers.length > 0 &&
-            b.answers.length <= 6 &&
+            b.answers.length <= interests.length &&
             b.answers.every((x: string) => interests.some((i) => i.id === x)),
           "Choose one or more sample interests",
         );
         const answers = [...new Set<string>(b.answers)],
           matches = matchTrades(answers, s.trades);
-        u.assessment = { answers, matches, version: "synthetic-tags-v1" };
+        u.assessment = { answers, matches, version: "supplied-tags-v2" };
         record(s, u, "assessment");
         for (const m of matches) record(s, u, "match", m.tradeId);
         return u.assessment;
@@ -386,6 +438,14 @@ export class DemoEngine {
           record(s, u, "save", b.tradeId);
         }
         return { saved: u.saved };
+      }
+      if (key === "clear-selection") {
+        u.selection = undefined;
+        record(s, u, "clear-selection");
+        return {
+          message:
+            "Active goal cleared. Saved trades and program progress are retained.",
+        };
       }
       const p = program(b?.programId);
       if (key === "select") {
@@ -520,6 +580,21 @@ export class DemoEngine {
         "Check practice question fields",
       );
       const previous = s.programs.find((x) => x.id === p.id);
+      for (const value of [
+        p.officialUrl,
+        p.sourceUrl,
+        ...p.videos,
+        ...(p.reference?.sources.map((x) => x.url) || []),
+      ]) {
+        if (!value) continue;
+        const url = new URL(value);
+        check(
+          ["http:", "https:"].includes(url.protocol) &&
+            !url.username &&
+            !url.password,
+          "Use a public HTTP or HTTPS reference link",
+        );
+      }
       check(
         previous
           ? b.expectedVersion === previous.version
@@ -529,11 +604,23 @@ export class DemoEngine {
       );
       const next = {
         ...p,
-        synthetic: true,
+        synthetic: previous?.synthetic ?? true,
         version: previous ? previous.version + 1 : 1,
-        officialUrl: "",
-        sourceUrl: "",
-        videos: [],
+        verifiedAt: "",
+        reference: p.reference
+          ? {
+              ...p.reference,
+              wageRows: p.wages
+                .split("\n")
+                .filter(Boolean)
+                .map((row) => {
+                  const split = row.indexOf(" — ");
+                  return split >= 0
+                    ? [row.slice(0, split), row.slice(split + 3)]
+                    : ["Supplied figure", row];
+                }),
+            }
+          : undefined,
       };
       if (previous) s.programs[s.programs.indexOf(previous)] = next;
       else s.programs.push(next);

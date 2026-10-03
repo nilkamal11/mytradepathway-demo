@@ -99,7 +99,7 @@ export function matchTrades(answers: string[], trades: Trade[]): Match[] {
       tradeId: t.id,
       score: Math.round(
         (t.tags.filter((tag) => answers.includes(tag)).length /
-          Math.max(t.tags.length, 1)) *
+          Math.max(new Set(answers).size, 1)) *
           100,
       ),
     }))

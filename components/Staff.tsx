@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Trade } from "@/lib/model";
 import { api, Eyebrow, Message, Icon } from "./App";
 import { downloadReport } from "@/lib/demo";
+import { Link } from "@/lib/router";
 export function Reports() {
   const [start, setStart] = useState(
       new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
@@ -184,6 +185,14 @@ export function Counselor({ trades }: { trades: Trade[] }) {
     <div className="page">
       <Eyebrow>School engagement</Eyebrow>
       <h1>A clearer view of their next steps.</h1>
+      <div className="row wrap">
+        <Link className="textlink" href="/contacts">
+          School contacts
+        </Link>
+        <Link className="textlink" href="/sources">
+          Sources & content review
+        </Link>
+      </div>
       <p className="lead">
         {roster?.school || "Your school"} · read-only student progress
       </p>

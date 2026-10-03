@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, Eyebrow, Message } from "./App";
 import { Reports } from "./Staff";
+import type { Program } from "@/lib/model";
 export function Admin() {
   const [data, setData] = useState<any>(null),
     [tab, setTab] = useState("overview"),
@@ -8,6 +9,7 @@ export function Admin() {
     [notice, setNotice] = useState(""),
     [programId, setProgramId] = useState("electrician-demo-chicago"),
     [name, setName] = useState(""),
+    [edited, setEdited] = useState<Program | null>(null),
     [importId, setImportId] = useState("sample-import"),
     [draftName, setDraftName] = useState(""),
     [confirm, setConfirm] = useState(false),
@@ -26,7 +28,8 @@ export function Admin() {
     draft = data?.imports.find((d: any) => d.id === importId);
   useEffect(() => {
     setName(program?.name || "");
-  }, [program?.name, program?.version]);
+    setEdited(program ? structuredClone(program) : null);
+  }, [program?.id, program?.version]);
   useEffect(() => {
     setDraftName(draft?.draft.name || "");
     setConfirm(false);
@@ -129,6 +132,7 @@ export function Admin() {
           <label>
             Program
             <select
+              aria-label="Program"
               value={programId}
               onChange={(e) => setProgramId(e.target.value)}
             >
@@ -144,7 +148,7 @@ export function Admin() {
               onSubmit={(e) => {
                 e.preventDefault();
                 void save("admin/program", {
-                  program: { ...program, name },
+                  program: { ...edited, name },
                   expectedVersion: program.version,
                 });
               }}
@@ -159,9 +163,115 @@ export function Admin() {
                 />
               </label>
               <p>
-                Stable program and step IDs retain preparation progress when the
-                name changes. All program information remains synthetic.
+                Edits change this browser’s preview only. Stable program and
+                step IDs retain existing progress. Supplied reference content
+                remains unverified.
               </p>
+              {edited && (
+                <>
+                  <div className="cards two">
+                    {(
+                      [
+                        ["provider", "Provider / local"],
+                        ["contact", "Contact information"],
+                        ["length", "Program length"],
+                        ["wages", "Wage reference"],
+                        ["eligibility", "Requirements"],
+                        ["applicationDates", "Application dates"],
+                        ["exam", "Entrance exam / selection"],
+                        ["preparation", "Preparation guidance"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key}>
+                        {label}
+                        <textarea
+                          aria-label={label}
+                          value={edited[key]}
+                          maxLength={15000}
+                          onChange={(e) =>
+                            setEdited({ ...edited, [key]: e.target.value })
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <h3>Edit roadmap steps</h3>
+                  {edited.steps.map((step, i) => (
+                    <details className="track-card" key={step.id}>
+                      <summary>{step.title}</summary>
+                      <label>
+                        Step {i + 1} title
+                        <input
+                          aria-label={`Step ${i + 1} title`}
+                          value={step.title}
+                          maxLength={300}
+                          required
+                          onChange={(e) =>
+                            setEdited({
+                              ...edited,
+                              steps: edited.steps.map((s, n) =>
+                                n === i ? { ...s, title: e.target.value } : s,
+                              ),
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        Step {i + 1} details
+                        <textarea
+                          aria-label={`Step ${i + 1} details`}
+                          value={step.explanation}
+                          maxLength={15000}
+                          onChange={(e) =>
+                            setEdited({
+                              ...edited,
+                              steps: edited.steps.map((s, n) =>
+                                n === i
+                                  ? { ...s, explanation: e.target.value }
+                                  : s,
+                              ),
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={step.required}
+                          onChange={(e) =>
+                            setEdited({
+                              ...edited,
+                              steps: edited.steps.map((s, n) =>
+                                n === i
+                                  ? { ...s, required: e.target.checked }
+                                  : s,
+                              ),
+                            })
+                          }
+                        />
+                        Required step {i + 1}
+                      </label>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={step.checklist}
+                          onChange={(e) =>
+                            setEdited({
+                              ...edited,
+                              steps: edited.steps.map((s, n) =>
+                                n === i
+                                  ? { ...s, checklist: e.target.checked }
+                                  : s,
+                              ),
+                            })
+                          }
+                        />
+                        Include step {i + 1} in preparation checklist
+                      </label>
+                    </details>
+                  ))}
+                </>
+              )}
               <div className="table-wrap">
                 <table>
                   <thead>

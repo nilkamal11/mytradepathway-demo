@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DemoEngine, STORAGE_KEY, type DemoStorage } from "../lib/demo";
 import { progressPercent } from "../lib/domain";
+import {
+  referencePrograms,
+  assessmentGroups,
+  referenceInterests,
+} from "../lib/reference";
 class MemoryStorage implements DemoStorage {
   values = new Map<string, string>();
   getItem(k: string) {
@@ -16,11 +21,17 @@ class MemoryStorage implements DemoStorage {
 }
 const sign = (engine: DemoEngine, fixtureId = "demo-student") =>
   engine.run("fixture-session", { fixtureId, ageAffirmed: true });
-test("public fixtures contain ten trades, only synthetic programs and example-domain identities", () => {
+test("public fixtures separate ten trades, twelve unverified reference programs and legacy synthetic programs", () => {
   const s = new DemoEngine().state();
   assert.equal(s.trades.length, 10);
-  assert.equal(s.programs.length, 11);
-  assert.ok(s.programs.every((p) => p.synthetic));
+  assert.equal(s.programs.length, 23);
+  assert.equal(s.programs.filter((p) => p.synthetic).length, 11);
+  assert.equal(s.programs.filter((p) => p.reference).length, 12);
+  assert.ok(
+    s.programs
+      .filter((p) => p.reference)
+      .every((p) => p.verifiedAt === "" && !p.synthetic),
+  );
   assert.ok(
     s.users.every((u) => u.email.endsWith("example.test") && !u.password),
   );
@@ -41,7 +52,7 @@ test("role selection requires age affirmation and has no password/authentication
     () => e.run("login", { email: "real@example.com", password: "something" }),
     /Administrator/,
   );
-  assert.equal(e.state().users.length, 8);
+  assert.equal(e.state().users.length, 12);
 });
 test("assessment deduplicates valid interests and gives deterministic top-three matches", () => {
   const e = new DemoEngine();
@@ -250,4 +261,165 @@ test("two visitors never share browser state or simulated admin edits", () => {
   });
   assert.notEqual(two.state().programs[0].name, "Only visitor one");
   assert.equal(two.run("session").user, null);
+});
+test("v1 browser migration retains actor, edits, progress, grants and unrelated storage", () => {
+  const storage = new MemoryStorage(),
+    prior = new DemoEngine(storage);
+  sign(prior);
+  prior.run("select", { programId: "electrician-demo-chicago" });
+  prior.run("progress", {
+    programId: "electrician-demo-chicago",
+    stepId: "electrician-research",
+    done: true,
+  });
+  const snapshot = JSON.parse(storage.getItem(STORAGE_KEY)!);
+  snapshot.version = 1;
+  snapshot.state.programs = snapshot.state.programs.filter(
+    (p: any) => !p.reference,
+  );
+  snapshot.state.users = snapshot.state.users.filter(
+    (u: any) => !u.id.startsWith("sample-student-"),
+  );
+  snapshot.state.programs[0].name = "Earlier browser edit";
+  storage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  storage.setItem("unrelated", "keep");
+  const migrated = new DemoEngine(storage),
+    d = migrated.run("dashboard");
+  assert.equal(migrated.state().programs.length, 23);
+  assert.equal(migrated.run("session").user.id, "demo-student");
+  assert.equal(d.selection, "electrician-demo-chicago");
+  assert.equal(
+    d.progress.find((p: any) => p.programId === d.selection).done,
+    1,
+  );
+  assert.equal(migrated.state().programs[0].name, "Earlier browser edit");
+  assert.equal(storage.getItem("unrelated"), "keep");
+  assert.deepEqual(
+    migrated.state().grants.find((g) => g.id === "fixture-demo-student"),
+    snapshot.state.grants.find((g: any) => g.id === "fixture-demo-student"),
+  );
+});
+test("clear goal retains saves and program-specific checklist completion", () => {
+  const e = new DemoEngine();
+  sign(e);
+  e.run("select", { programId: "electrician-reference-cook" });
+  const p = referencePrograms.find(
+    (p) => p.id === "electrician-reference-cook",
+  )!;
+  e.run("progress", { programId: p.id, stepId: p.steps[0].id, done: true });
+  e.run("clear-selection", {});
+  assert.equal(e.run("dashboard").selection, undefined);
+  assert.ok(e.run("dashboard").saved.includes("electrician"));
+  e.run("select", { programId: p.id });
+  assert.equal(
+    e.run("dashboard").progress.find((r: any) => r.programId === p.id).done,
+    1,
+  );
+});
+test("three assessment groups cover all supplied tags without duplicate chips", () => {
+  assert.equal(assessmentGroups.length, 3);
+  const ids = assessmentGroups.flatMap((g) => g.ids);
+  assert.equal(ids.length, new Set(ids).size);
+  assert.deepEqual([...ids].sort(), referenceInterests.map((i) => i.id).sort());
+  const e = new DemoEngine();
+  sign(e);
+  const a = e.run("assessment", { answers: ids });
+  assert.ok(a.matches.length <= 3);
+  assert.ok(a.matches.every((m: any) => m.score > 0 && m.score <= 100));
+});
+test("county roadmaps and practice banks remain independent; acceptance steps do not count", () => {
+  const e = new DemoEngine();
+  sign(e);
+  const cook = referencePrograms.find(
+      (p) => p.id === "electrician-reference-cook",
+    )!,
+    dupage = referencePrograms.find(
+      (p) => p.id === "electrician-reference-dupage",
+    )!;
+  assert.notDeepEqual(
+    cook.steps.map((s) => s.title),
+    dupage.steps.map((s) => s.title),
+  );
+  assert.equal(dupage.questions.length, 0);
+  assert.ok(cook.steps.some((s) => !s.checklist));
+  assert.ok(cook.questions.length === 15);
+  const after = cook.steps.find((s) => !s.checklist)!;
+  assert.throws(
+    () =>
+      e.run("progress", { programId: cook.id, stepId: after.id, done: true }),
+    /valid checklist/,
+  );
+  const optional = cook.steps.find((s) => !s.required && s.checklist)!;
+  e.run("progress", { programId: cook.id, stepId: optional.id, done: true });
+  assert.equal(progressPercent(e.state(), "demo-student", cook).done, 0);
+  assert.equal(
+    referencePrograms.find((p) => p.tradeId === "painter")!.questions.length,
+    0,
+  );
+  assert.equal(
+    referencePrograms.find((p) => p.tradeId === "construction-craft-laborer")!
+      .reference!.practiceLabel,
+    "Try Job-Readiness Questions",
+  );
+});
+test("all supplied questions and reference links validate, with no executable archive markup", () => {
+  assert.equal(
+    referencePrograms.reduce((n, p) => n + p.questions.length, 0),
+    135,
+  );
+  for (const p of referencePrograms) {
+    assert.equal(p.verifiedAt, "");
+    assert.equal(new Set(p.steps.map((s) => s.id)).size, p.steps.length);
+    assert.ok(!/<(?:script|div|button|a\s|img)\b/i.test(JSON.stringify(p)));
+    for (const q of p.questions) {
+      assert.ok(q.answer >= 0 && q.answer < q.options.length);
+      assert.ok(q.explanation.length > 0);
+    }
+    for (const { url } of p.reference!.sources) {
+      const u = new URL(url);
+      assert.ok(["https:", "http:"].includes(u.protocol));
+      assert.ok(!u.username && !u.password);
+    }
+  }
+});
+test("six synthetic school students retain school-scoped reports and example identities", () => {
+  const e = new DemoEngine();
+  sign(e, "demo-counselor");
+  assert.equal(e.run("roster").total, 6);
+  assert.ok(
+    e.run("roster").rows.every((u: any) => u.email.endsWith("example.test")),
+  );
+  assert.equal(e.run("reports").registered, 6);
+  assert.throws(() => e.run("student/demo-other"), /outside/);
+});
+test("reference edits retain sources, stay unverified and reject executable link protocols", () => {
+  const e = new DemoEngine();
+  sign(e, "demo-admin");
+  const p = e.state().programs.find((p) => p.reference)!;
+  e.run("admin/program", {
+    program: {
+      ...p,
+      wages: "Year 1 — Demo-only replacement",
+      verifiedAt: "2026-10-03",
+    },
+    expectedVersion: p.version,
+  });
+  const saved = e.state().programs.find((x) => x.id === p.id)!;
+  assert.equal(saved.sourceUrl, p.sourceUrl);
+  assert.equal(saved.verifiedAt, "");
+  assert.deepEqual(saved.reference!.wageRows, [
+    ["Year 1", "Demo-only replacement"],
+  ]);
+  assert.throws(
+    () =>
+      e.run("admin/program", {
+        program: { ...saved, officialUrl: "javascript:alert(1)" },
+        expectedVersion: saved.version,
+      }),
+    /HTTP/,
+  );
+  assert.equal(
+    e.state().programs.find((x) => x.id === p.id)!.officialUrl,
+    p.officialUrl,
+  );
 });

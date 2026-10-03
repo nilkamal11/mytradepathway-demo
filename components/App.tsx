@@ -6,6 +6,14 @@ import type { Program, Trade, Match, Step } from "@/lib/model";
 import { Admin } from "./Admin";
 import { ChecklistToggle } from "./ChecklistToggle";
 import { Counselor, Reports } from "./Staff";
+import {
+  ActiveChecklist,
+  LearningHub,
+  MatchActions,
+  ReferencePanels,
+  SnapshotNotice,
+} from "./Reference";
+import { assessmentGroups } from "@/lib/reference";
 export const api = demoApi;
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const shapes: Record<string, React.ReactNode> = {
@@ -132,7 +140,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, path]);
   useEffect(() => {
     setMenu(false);
   }, [path]);
@@ -162,6 +170,8 @@ export default function App() {
     ["/trades", "grid", "Explore trades"],
     ["/assessment", "compass", "Find my match"],
     ["/resources", "book", "Resources"],
+    ["/unions", "users", "Unions & apprenticeships"],
+    ["/pre-apprenticeships", "compass", "Pre-apprenticeships"],
     ...(session.user?.role === "counselor"
       ? [["/counselor", "users", "School dashboard"]]
       : []),
@@ -193,7 +203,7 @@ export default function App() {
                 style: "currency",
                 currency: "USD",
               }).format((catalog.pricing?.priceCents ?? 4900) / 100)}{" "}
-              <small>intended launch price</small>
+              <small>earlier proposal figure</small>
             </div>
             <p>
               The client will approve either one-time access with a duration or
@@ -207,6 +217,11 @@ export default function App() {
             <Icon name="book" />
             <h2>School access</h2>
             <p>
+              <b>Specification pricing:</b> $2,500/year pilot; $5,000/year
+              standard per school, with unlimited students and counselors. No
+              purchases occur in this demo.
+            </p>
+            <p>
               A verified school email and active institutional license connect
               students to their pathway. Shared district domains use enrollment
               codes.
@@ -218,6 +233,11 @@ export default function App() {
           <div className="card">
             <Icon name="grid" />
             <h2>Library access</h2>
+            <p>
+              <b>Specification pricing:</b> $5,000/year flat. Larger systems
+              require an agreed quote. The proposed library-card connection is
+              not implemented here.
+            </p>
             <p>
               Redeem a code from a participating library with an active license.
               Codes provide access without validating a library card.
@@ -365,15 +385,23 @@ export default function App() {
                   ))}
               </div>
             )}
+            <ActiveChecklist
+              programs={catalog.programs}
+              dash={dash}
+              act={act}
+            />
             {dash?.assessment && (
               <>
                 <div className="section-title">
                   <h2>Your interest matches</h2>
-                  <span className="pill">Demo rules v1</span>
+                  <span className="pill">Preference overlap</span>
                 </div>
-                <Matches
+                <MatchActions
                   matches={dash.assessment.matches}
                   trades={catalog.trades}
+                  programs={catalog.programs}
+                  dash={dash}
+                  act={act}
                 />
               </>
             )}
@@ -441,9 +469,27 @@ export default function App() {
                 <Eyebrow>Another way to begin</Eyebrow>
                 <h3>Pre-apprenticeship resources</h3>
                 <p>
+                  <a
+                    href="https://hire360partners.org/assessment/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Begin HIRE360 assessment ↗
+                  </a>
+                </p>
+                <p>
+                  <a
+                    href="https://cwit.org/info-session-sign-up/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    CWIT information session ↗
+                  </a>
+                </p>
+                <p>
                   Explore the HIRE360 and Chicago Women in Trades content areas.
                 </p>
-                <Link href="/resources" className="textlink">
+                <Link href="/pre-apprenticeships" className="textlink">
                   See resources →
                 </Link>
               </div>
@@ -468,7 +514,23 @@ export default function App() {
         act={act}
       />
     );
-  else if (path === "/resources")
+  else if (
+    [
+      "/unions",
+      "/pre-apprenticeships",
+      "/contacts",
+      "/sources",
+      "/resources",
+    ].includes(path)
+  )
+    content = (
+      <LearningHub
+        view={path === "/resources" ? "unions" : path.slice(1)}
+        programs={catalog.programs}
+        trades={catalog.trades}
+      />
+    );
+  else if (path === "/legacy-resources")
     content = (
       <div className="page">
         <Eyebrow>Learn the landscape</Eyebrow>
@@ -525,7 +587,10 @@ export default function App() {
         Skip to content
       </a>
       <div className="review-banner">
-        PUBLIC DEMO <span>• Sample data • Progress stays in your browser</span>
+        PUBLIC DEMO{" "}
+        <span>
+          • Sample accounts • Reference content • Progress stays in your browser
+        </span>
         <Link href="/signin">Try a demo account →</Link>
         <button
           className="demo-reset"
@@ -575,7 +640,7 @@ export default function App() {
               <Link href="/legal/disclaimer">Disclaimer</Link>
             </div>
             <small>
-              Public synthetic demo · Client-approved content required before
+              Public demo · Supplied reference content needs verification before
               launch.
             </small>
           </footer>
@@ -693,8 +758,9 @@ export function Gate({ label }: { label: string }) {
       </span>
       <h1>{label}</h1>
       <p className="lead">
-        Sign in, verify your email, and connect an active school, library or
-        individual access grant. Existing progress is retained when access ends.
+        Choose a sample account and affirm that you are at least 13 to explore
+        the demo. Existing preparation progress is retained when sample access
+        ends.
       </p>
       <div className="row">
         <Link className="btn" href="/signin">
@@ -785,8 +851,9 @@ function Landing({ trades }: { trades: Trade[] }) {
           ))}
         </div>
         <div className="home-note">
-          Ten illustrative trade pathways. Descriptions and program details in
-          this edition are synthetic examples.
+          Ten trades with supplied reference descriptions. Program wages,
+          requirements and deadlines are unverified snapshots. Sample accounts
+          and activity are synthetic.
         </div>
       </section>
       <section className="home-section how">
@@ -997,8 +1064,10 @@ function Assessment({
         mind.
       </p>
       <div className="callout">
-        The supplied assessment has not been provided. This is a synthetic
-        six-interest demonstration using versioned tag matching.
+        Explore your interests, priorities and comfort level. Matches use the
+        supplied trade tags; the chip labels and grouping are editorial choices.
+        Scores show preference overlap, not admission chances or a verified
+        ranking of wages.
       </div>
       <form
         onSubmit={(e) => {
@@ -1008,36 +1077,65 @@ function Assessment({
             .catch(() => {});
         }}
       >
-        <div className="interest-grid">
-          {catalog.interests.map((i) => (
-            <label
-              key={i.id}
-              className={
-                "interest " + (answers.includes(i.id) ? "checked" : "")
-              }
+        {submitted ? (
+          <div className="card">
+            <h2>Your answers</h2>
+            <p>
+              {catalog.interests
+                .filter((i) => answers.includes(i.id))
+                .map((i) => i.name)
+                .join(" · ")}
+            </p>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setSubmitted(false)}
             >
-              <input
-                type="checkbox"
-                checked={answers.includes(i.id)}
-                onChange={(e) => {
-                  setAnswers(
-                    e.target.checked
-                      ? [...answers, i.id]
-                      : answers.filter((x) => x !== i.id),
-                  );
-                  setSubmitted(false);
-                }}
-              />
-              <span>
-                <b>{i.name}</b>
-                <small>{i.description}</small>
-              </span>
-            </label>
-          ))}
-        </div>
-        <button className="btn" disabled={!answers.length || busy}>
-          Show my matches <Icon name="arrow" />
-        </button>
+              Edit your answers
+            </button>
+          </div>
+        ) : (
+          <>
+            {assessmentGroups.map((group) => (
+              <fieldset className="assessment-group" key={group.name}>
+                <legend>{group.name}</legend>
+                <div className="interest-grid">
+                  {catalog.interests
+                    .filter((i) => group.ids.includes(i.id))
+                    .map((i) => (
+                      <label
+                        key={i.id}
+                        className={
+                          "interest " +
+                          (answers.includes(i.id) ? "checked" : "")
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={answers.includes(i.id)}
+                          onChange={(e) => {
+                            setAnswers(
+                              e.target.checked
+                                ? [...answers, i.id]
+                                : answers.filter((x) => x !== i.id),
+                            );
+                            setSubmitted(false);
+                          }}
+                        />
+                        <span>
+                          <b>{i.name}</b>
+                          <small>{i.description}</small>
+                        </span>
+                      </label>
+                    ))}
+                </div>
+              </fieldset>
+            ))}
+            <button className="btn" disabled={!answers.length || busy}>
+              Show my matches <Icon name="arrow" />
+            </button>
+          </>
+        )}
       </form>
       {submitted && dash?.assessment && (
         <section className="results" aria-live="polite">
@@ -1045,7 +1143,13 @@ function Assessment({
             <h2>Your top matches</h2>
             <span className="pill">Up to 3 pathways</span>
           </div>
-          <Matches matches={dash.assessment.matches} trades={catalog.trades} />
+          <MatchActions
+            matches={dash.assessment.matches}
+            trades={catalog.trades}
+            programs={catalog.programs}
+            dash={dash}
+            act={act}
+          />
           <p className="muted">
             Scores reflect demo tag overlap. Your preferences and official
             program requirements matter more than a score.
@@ -1086,7 +1190,9 @@ function TradeDetail({
   dash: any;
   act: Act;
 }) {
-  const programs = catalog.programs.filter((p) => p.tradeId === trade?.id);
+  const programs = catalog.programs
+    .filter((p) => p.tradeId === trade?.id)
+    .sort((a, b) => Number(!!b.reference) - Number(!!a.reference));
   const [selected, setSelected] = useState(
       dash?.selection && programs.some((p) => p.id === dash.selection)
         ? dash.selection
@@ -1153,16 +1259,27 @@ function TradeDetail({
               <Icon name="arrow" />
             </button>
           </div>
-          <div className="callout">
-            {p.synthetic
-              ? "Synthetic program — not a real union or training-provider listing. No verified wage or eligibility claims are made."
-              : "Verify all requirements with the official provider before applying."}
-          </div>
+          {p.reference ? (
+            <SnapshotNotice />
+          ) : (
+            <div className="callout">
+              {p.synthetic
+                ? "Synthetic program — not a real union or training-provider listing. No verified wage or eligibility claims are made."
+                : "Verify all requirements with the official provider before applying."}
+            </div>
+          )}
           <div className="tabs" role="tablist" aria-label="Program sections">
             {[
               ["pathway", "My preparation"],
               ["details", "Program details"],
-              ["practice", "Practice questions"],
+              ...(p.questions.length
+                ? [
+                    [
+                      "practice",
+                      p.reference?.practiceLabel || "Practice questions",
+                    ],
+                  ]
+                : []),
             ].map(([key, label]) => (
               <button
                 role="tab"
@@ -1207,13 +1324,22 @@ function TradeDetail({
                         ) : (
                           <b>{step.title}</b>
                         )}
-                        <p>{step.explanation}</p>
+                        <details>
+                          <summary aria-label={step.title + " details"}>
+                            ⓘ Step details
+                          </summary>
+                          <p>{step.explanation}</p>
+                        </details>
                         <span
                           className={
                             "pill " + (step.required ? "required" : "")
                           }
                         >
-                          {step.required ? "Required" : "Recommended"}
+                          {!step.checklist
+                            ? "After acceptance"
+                            : step.required
+                              ? "Required"
+                              : "Recommended"}
                           {!step.checklist ? " · information only" : ""}
                         </span>
                       </div>
@@ -1223,6 +1349,21 @@ function TradeDetail({
                   <div className="empty">
                     Preparation steps have not been supplied.
                   </div>
+                )}
+                {p.questions.length > 0 && (
+                  <button
+                    className="btn secondary"
+                    onClick={() => setTab("practice")}
+                  >
+                    {p.reference?.practiceLabel || "Practice questions"}{" "}
+                    <Icon name="arrow" />
+                  </button>
+                )}
+                {!p.questions.length && p.reference && (
+                  <p className="muted">
+                    {p.reference.practiceNote ||
+                      "No program-specific practice questions were supplied. See the preparation and source links."}
+                  </p>
                 )}
               </section>
               <aside className="card">
@@ -1262,6 +1403,8 @@ function TradeDetail({
             </div>
           ) : tab === "practice" ? (
             <Practice key={p.id} program={p} dash={dash} act={act} />
+          ) : p.reference ? (
+            <ReferencePanels program={p} />
           ) : (
             <div className="cards two">
               {[
@@ -1355,6 +1498,19 @@ function Practice({
   const q = program.questions[index];
   const attempts = dash.practice?.[program.id] || {};
   const answered = Object.keys(attempts).length;
+  useEffect(() => {
+    const value = attempts[q?.id];
+    setAnswer(value ?? null);
+    setFeedback(
+      value === undefined
+        ? null
+        : {
+            skipped: value === null,
+            correct: value === q?.answer,
+            explanation: q?.explanation,
+          },
+    );
+  }, [index, program.id]);
   async function submit(value: number | null) {
     try {
       const result = await act("practice", {
@@ -1374,13 +1530,18 @@ function Practice({
   return (
     <div className="card practice-panel">
       <span className="pill">
-        Original synthetic practice · not an official examination
+        {program.reference
+          ? "Original supplied practice · not official exam questions"
+          : "Original synthetic practice · not an official examination"}
       </span>
       <h2>
         {complete
           ? "Practice summary"
           : `Question ${index + 1} of ${program.questions.length}`}
       </h2>
+      {program.reference && (
+        <p className="muted">{program.reference.practiceNote}</p>
+      )}
       {complete ? (
         <>
           <p>
@@ -1391,6 +1552,13 @@ function Practice({
           <p>
             Preparation is a learning activity, not a certification or
             admissions score.
+          </p>
+          <p>
+            {
+              program.questions.filter((q) => attempts[q.id] === q.answer)
+                .length
+            }{" "}
+            correct answers recorded. You can review and retry any question.
           </p>
           <button
             className="btn secondary"
@@ -1406,6 +1574,7 @@ function Practice({
         </>
       ) : (
         <>
+          {q.section && <span className="pill">{q.section}</span>}
           <h3>{q.prompt}</h3>
           <div className="question-options">
             {q.options.map((o, i) => (
